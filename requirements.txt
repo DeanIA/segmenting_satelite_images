@@ -1,0 +1,13 @@
+numpy
+torch
+torchvision
+opencv-python
+Pillow
+tqdm
+pycocotools
+#detectron2 # Only for the SAM environment (not compatiable with py3.8)
+scipy
+huggingface_hub
+catalyst
+timm
+albumentations
