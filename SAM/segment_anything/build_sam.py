@@ -4,10 +4,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+'''
+When someone calls build_sam (or uses sam_model_registry[model_type]), 
+it calls one of the specific builder functions (build_sam_vit_h, 
+build_sam_vit_l, build_sam_vit_b, or build_sam_vit_t) defined in this file. 
+Each of these functions constructs the appropriate SAM or SAM-HQ model architecture 
+(with the correct encoder/decoder sizes and layers) and loads the checkpoint if provided.
+'''
+
 import torch
-
 from functools import partial
-
 from .modeling import ImageEncoderViT, MaskDecoderHQ, PromptEncoder, Sam, TwoWayTransformer, TinyViT
 
 

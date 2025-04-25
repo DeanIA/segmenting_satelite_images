@@ -1,3 +1,6 @@
 /geoseg/data
 **/ckpt/
+**__pycache__
 .DS_Store
+OG_README.md
+rename.py
