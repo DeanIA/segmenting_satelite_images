@@ -480,7 +480,7 @@ def sessrs(path):
     image.save(os.path.join(sessrs_path,path))
 
 def multipool(function, args,processes=72):
-    pool = multiprocessing.Pool(processes=processes)
+    pool = multiprocessing.Pool(processes=int(processes))
     # results = pool.imap_unordered(function, args)
     with tqdm(total=len(args)) as pbar:
     # 使用imap_unordered来执行任务并迭代结果
@@ -545,9 +545,9 @@ if __name__ == "__main__":
     write_file_start = {'modify':'modify_sessrs','no_modify':'modify5'}
 
     dataset_dir_dict = {'potsdam':'../GeoSeg/data/potsdam',
-                        'Urban': '../GeoSeg/data/Urban'}
+                        'Urban': '../data/Urban'}
     
-    gt_dir_end = {'no_modify':'/val/masks','modify':'/val/modify_masks'}
+    gt_dir_end = {'no_modify':'/val/masks','modify':'/val/masks'}
 
     name_classes_dict  = {'potsdam': ['ImSurf', 'Building', 'LowVeg', 'Tree', 'Car', 'Clutter'],
                         'Urban':['background', 'building', 'road', 'water', 'barren', 'forest','agricultural','other']}
@@ -560,7 +560,7 @@ if __name__ == "__main__":
 
     args                   = get_args()
     fig_results            = args.fig_results
-    dataset                = args.fig_results.split('/')[-2]
+    dataset                = 'Urban'
 
     p_dir                  = fig_results+'/pre_p'
     pre_p_info_path        = fig_results+'/pre_p_info'

@@ -15,9 +15,6 @@ from get_miou import get_miou_all_main
 from scipy.ndimage import label, find_objects
 import argparse
 import re
-from pathlib import Path
-import traceback
-
 
 class MaskData:
     """
@@ -138,179 +135,173 @@ def singleMask2rle(mask):
     return rle
 
 def sessrs(path):
-    print(f"[worker-start]  {path}", flush=True)   
-    try:
-        with open(os.path.join(pre_p_info_path,path[:-4]+'.json'), 'r') as file:  
-            label = json.load(file)
 
-        with open(os.path.join(sam_label_info_path,path[:-4]+'.json'), 'r') as file:  
-            mask = json.load(file)
+    with open(os.path.join(pre_p_info_path,path[:-4]+'.json'), 'r') as file:  
+        label = json.load(file)
 
-        label_segmentation = np.array(Image.open(os.path.join(p_dir,path)))
-        H,W = label_segmentation.shape[0],label_segmentation.shape[1]   
-        Ak={}
-        for k in range(num_classes):
-            Ak[f'label{k}'] = []
-        
-        for m in mask:
-            mask_l_segmentation = mask_utils.decode(m['rles']).astype(np.bool_)
-            areas        = m['area']
-            counts      = np.bincount(label_segmentation[mask_l_segmentation])
-            if counts.size == 0:
+    with open(os.path.join(sam_label_info_path,path[:-4]+'.json'), 'r') as file:  
+        mask = json.load(file)
+
+    label_segmentation = np.array(Image.open(os.path.join(p_dir,path)))
+    H,W = label_segmentation.shape[0],label_segmentation.shape[1]   
+    Ak={}
+    for k in range(num_classes):
+        Ak[f'label{k}'] = []
+    
+    for m in mask:
+        mask_l_segmentation = mask_utils.decode(m['rles']).astype(np.bool_)
+        areas        = m['area']
+        counts      = np.bincount(label_segmentation[mask_l_segmentation])
+        if counts.size == 0:
+            m['semantic'] = None
+            m['e_counts_ratio'] = None
+            continue
+        else:
+            most_common_element = np.argmax(counts)
+            e_counts            = counts[most_common_element]
+
+            if e_counts/areas > args.fix_t1[f'{most_common_element}']:
+                
+                m['semantic'] = most_common_element
+                m['e_counts_ratio'] = round(e_counts/areas,3)
+            else:
                 m['semantic'] = None
                 m['e_counts_ratio'] = None
-                continue
-            else:
-                most_common_element = np.argmax(counts)
-                e_counts            = counts[most_common_element]
 
-                if e_counts/areas > args.fix_t1[f'{most_common_element}']:
-                    
-                    m['semantic'] = most_common_element
-                    m['e_counts_ratio'] = round(e_counts/areas,3)
+    mask = sorted(mask,key=lambda x: x['area'],reverse=True)
+    for i in range(len(mask)-1):
+        mask_i_sementic = mask[i]['semantic']
+        if mask_i_sementic in args.modify_category:
+            for j in range(i+1,len(mask)): 
+                mask_j_sementic = mask[j]['semantic']
+                if mask_i_sementic != mask_j_sementic and mask_j_sementic is not None:
+                    if area(merge([mask[i]['rles'],mask[j]['rles']],intersect=True))/mask[j]['area']>args.fix_t2[f'{mask_i_sementic}'] and mask[i]['e_counts_ratio']<mask[j]['e_counts_ratio']:
+                        mask[i]['rles'] = deintersect(mask[i]['rles'],mask[j]['rles'])
+                        mask[i]['area'] = area(mask[i]['rles'])
                 else:
-                    m['semantic'] = None
-                    m['e_counts_ratio'] = None
+                    continue
+        else:
+            continue
 
-        mask = sorted(mask,key=lambda x: x['area'],reverse=True)
-        for i in range(len(mask)-1):
-            mask_i_sementic = mask[i]['semantic']
-            if mask_i_sementic in args.modify_category:
-                for j in range(i+1,len(mask)): 
-                    mask_j_sementic = mask[j]['semantic']
-                    if mask_i_sementic != mask_j_sementic and mask_j_sementic is not None:
-                        if area(merge([mask[i]['rles'],mask[j]['rles']],intersect=True))/mask[j]['area']>args.fix_t2[f'{mask_i_sementic}'] and mask[i]['e_counts_ratio']<mask[j]['e_counts_ratio']:
-                            mask[i]['rles'] = deintersect(mask[i]['rles'],mask[j]['rles'])
-                            mask[i]['area'] = area(mask[i]['rles'])
-                    else:
-                        continue
-            else:
-                continue
-
-        for m in mask:
-            semantic = m['semantic']
-            if semantic is not None:
-                Ak[f'label{semantic}'].append(m)
-                
-        
-        
-        Pk={}
+    for m in mask:
+        semantic = m['semantic']
+        if semantic is not None:
+            Ak[f'label{semantic}'].append(m)
+              
+    
+    
+    Pk={}
+    for k in range(num_classes):
+        Pk[f'label{k}'] = []
+    
+    for l in label:
         for k in range(num_classes):
-            Pk[f'label{k}'] = []
-        
-        for l in label:
-            for k in range(num_classes):
-                if l['semantic'] == str(k):
-                    Pk[f'label{k}'].append(l)
+            if l['semantic'] == str(k):
+                Pk[f'label{k}'].append(l)
 
-        # sessrs_Pk:包含合并sessrs后某一类型所有Pk
-        sessrs_Pk = {}
-        # sessrsed_Pk:包含所有被sessrs处理过的pk
-        # sessrs_Pk和sessrsed_Pk的区别在于sessrs_Pk是某种地物类型全部合并后的结果，sessrsed_Pk是分散的
-        # 初始化sessrsed_Pk
-        
-        for k in args.modify_category:
-            flag = 0
-            t1 = args.fix_t1[f'{k}']
-            t2 = args.fix_t2[f'{k}']
-            for p_k in Pk[f'label{k}']:
-                tmp =[]
-                for mask_S in Ak[f'label{k}']:
+    # sessrs_Pk:包含合并sessrs后某一类型所有Pk
+    sessrs_Pk = {}
+    # sessrsed_Pk:包含所有被sessrs处理过的pk
+    # sessrs_Pk和sessrsed_Pk的区别在于sessrs_Pk是某种地物类型全部合并后的结果，sessrsed_Pk是分散的
+    # 初始化sessrsed_Pk
+    
+    for k in args.modify_category:
+        flag = 0
+        t1 = args.fix_t1[f'{k}']
+        t2 = args.fix_t2[f'{k}']
+        for p_k in Pk[f'label{k}']:
+            tmp =[]
+            for mask_S in Ak[f'label{k}']:
 
-                    if area(mask_S['rles'])>200000:
-                        tmp =[]
-                        continue
+                if area(mask_S['rles'])>200000:
+                    tmp =[]
+                    continue
 
-                    Os = area(merge([p_k['rles'],mask_S['rles']],intersect=True))/mask_S['area']
-                    Op = area(merge([p_k['rles'],mask_S['rles']],intersect=True))/p_k['size']
-                    if Os>t1 or Op>t2:
-                        tmp.append(mask_S['rles'])
+                Os = area(merge([p_k['rles'],mask_S['rles']],intersect=True))/mask_S['area']
+                Op = area(merge([p_k['rles'],mask_S['rles']],intersect=True))/p_k['size']
+                if Os>t1 or Op>t2:
+                    tmp.append(mask_S['rles'])
 
-                if len(tmp)>1 and len(tmp)<5 :
+            if len(tmp)>1 and len(tmp)<5 :
 
-                    tmp_rles = merge(tmp)
-                    if area(merge([tmp_rles,p_k['rles']],intersect=True))/area(p_k['rles']) > t2:
-                    
-                        p_k['rles'] = tmp_rles
-                        Pk[f'label{k}'][flag] = p_k
-
-                elif len(tmp)==1 and area(tmp[0]) >t2*area(p_k['rles']) and area(tmp[0])*t1 <area(p_k['rles']):
-                    p_k['rles'] = tmp[0]
+                tmp_rles = merge(tmp)
+                if area(merge([tmp_rles,p_k['rles']],intersect=True))/area(p_k['rles']) > t2:
+                
+                    p_k['rles'] = tmp_rles
                     Pk[f'label{k}'][flag] = p_k
-                else:
-                    pass
 
-                flag = flag + 1
-
-            if len(Pk[f'label{k}']) == 0:
-                sessrs_Pk[f'{k}'] = None
-            
+            elif len(tmp)==1 and area(tmp[0]) >t2*area(p_k['rles']) and area(tmp[0])*t1 <area(p_k['rles']):
+                p_k['rles'] = tmp[0]
+                Pk[f'label{k}'][flag] = p_k
             else:
-                Pk_rles = [pk['rles'] for pk in Pk[f'label{k}']]
-                sessrs_Pk[f'{k}'] = merge(Pk_rles)
+                pass
 
-        intersect_list=[]
-        sessrs_index = args.modify_category
-        for i in range(len(sessrs_index)):
-            if sessrs_Pk[f'{sessrs_index[i]}'] is None:
-                continue
-            for j in range(i + 1, len(sessrs_index)):
-                if sessrs_Pk[f'{sessrs_index[j]}'] is None:
-                    continue
+            flag = flag + 1
 
-                intersect = merge([sessrs_Pk[f'{sessrs_index[i]}'],sessrs_Pk[f'{sessrs_index[j]}']],intersect=True)
-                if area(intersect) ==0:
-                    continue
-                intersect = decode(intersect)
-                seg_ins_intersect = segmentation_2_instance(intersect)
-                for inter in seg_ins_intersect:
-                    max_i_iou = 0
-                    max_j_iou = 0
-
-                    for pki in Pk[f'label{sessrs_index[i]}']:
-                        is_iou =  iou([inter['rles']],[pki['rles']],[0])[0][0]
-                        if is_iou > max_i_iou:
-                            max_i_iou = is_iou
-
-                    for pkj in Pk[f'label{sessrs_index[j]}']:
-                        is_iou =  iou([inter['rles']],[pkj['rles']],[0])[0][0]
-                        if is_iou > max_j_iou:
-                            max_j_iou = is_iou  
-                    
-                    if max_i_iou > max_j_iou:
-                        inter['semantic'] = sessrs_index[i] 
-                    else:
-                        inter['semantic'] = sessrs_index[j]
-                    
-                    intersect_list.append(inter)
-
-        image = np.ones([H,W],dtype=np.uint8)*255
-        flag = np.ones([H,W],dtype=np.uint8)
-
-        for inter in intersect_list:
-            semantic = int(inter['semantic'])
-            seg = decode(inter['rles'])
-            image[seg==1] = (semantic*seg*flag)[seg==1]
-            flag[flag&seg==1] = 0
+        if len(Pk[f'label{k}']) == 0:
+            sessrs_Pk[f'{k}'] = None
         
-        for k in args.modify_category:
-            # seg_flag = 0
-            if sessrs_Pk[f'{k}'] is not None:
-                seg = decode(sessrs_Pk[f'{k}'])
-                image[flag*seg==1] = (k*seg*flag)[flag*seg==1]
-            else:
+        else:
+            Pk_rles = [pk['rles'] for pk in Pk[f'label{k}']]
+            sessrs_Pk[f'{k}'] = merge(Pk_rles)
+
+    intersect_list=[]
+    sessrs_index = args.modify_category
+    for i in range(len(sessrs_index)):
+        if sessrs_Pk[f'{sessrs_index[i]}'] is None:
+            continue
+        for j in range(i + 1, len(sessrs_index)):
+            if sessrs_Pk[f'{sessrs_index[j]}'] is None:
                 continue
 
-        label_segmentation_modify = modify(label_segmentation,args.modify_category)    
-        image[image==255] = label_segmentation_modify[image==255]
-        image = Image.fromarray(np.uint8(image),'P')
-        image.putpalette(palette)
-        image.save(os.path.join(sessrs_path,path))
+            intersect = merge([sessrs_Pk[f'{sessrs_index[i]}'],sessrs_Pk[f'{sessrs_index[j]}']],intersect=True)
+            if area(intersect) ==0:
+                continue
+            intersect = decode(intersect)
+            seg_ins_intersect = segmentation_2_instance(intersect)
+            for inter in seg_ins_intersect:
+                max_i_iou = 0
+                max_j_iou = 0
 
-    except Exception as e:
-        print(f"[worker-error]  {path}  →  {e}", file=sys.stderr, flush=True)
-        traceback.print_exc()           # full stack trace
+                for pki in Pk[f'label{sessrs_index[i]}']:
+                    is_iou =  iou([inter['rles']],[pki['rles']],[0])[0][0]
+                    if is_iou > max_i_iou:
+                        max_i_iou = is_iou
 
+                for pkj in Pk[f'label{sessrs_index[j]}']:
+                    is_iou =  iou([inter['rles']],[pkj['rles']],[0])[0][0]
+                    if is_iou > max_j_iou:
+                        max_j_iou = is_iou  
+                
+                if max_i_iou > max_j_iou:
+                    inter['semantic'] = sessrs_index[i] 
+                else:
+                    inter['semantic'] = sessrs_index[j]
+                
+                intersect_list.append(inter)
+
+    image = np.ones([H,W],dtype=np.uint8)*255
+    flag = np.ones([H,W],dtype=np.uint8)
+
+    for inter in intersect_list:
+        semantic = int(inter['semantic'])
+        seg = decode(inter['rles'])
+        image[seg==1] = (semantic*seg*flag)[seg==1]
+        flag[flag&seg==1] = 0
+    
+    for k in args.modify_category:
+        # seg_flag = 0
+        if sessrs_Pk[f'{k}'] is not None:
+            seg = decode(sessrs_Pk[f'{k}'])
+            image[flag*seg==1] = (k*seg*flag)[flag*seg==1]
+        else:
+            continue
+
+    label_segmentation_modify = modify(label_segmentation,args.modify_category)    
+    image[image==255] = label_segmentation_modify[image==255]
+    image = Image.fromarray(np.uint8(image),'P')
+    image.putpalette(palette)
+    image.save(os.path.join(sessrs_path,path))
 
 def deintersect(mask1,mask2):
     '''
@@ -578,8 +569,6 @@ if __name__ == "__main__":
         p_dir               = fig_results+'/pre_p'
         pre_p_info_path     = fig_results+'/pre_p_info'
         sessrs_path           = fig_results+'/se_mask'
-
-        Path(sessrs_path).mkdir(parents=True, exist_ok=True)
         img_paths = sorted(os.listdir(p_dir))
         get_best_sessrs(args.multipool_nums)
 

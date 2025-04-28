@@ -8,7 +8,11 @@ from tqdm import tqdm
 
 
 @torch.no_grad()
-def get_sam_info(image,box_nms = 0.7,min_mask_region_area=100, pred_iou_thresh=0.88,stability_score_thresh=0.92,*args, **kwargs):
+def get_sam_info(image,box_nms = 0.7,
+                 min_mask_region_area=100, 
+                 pred_iou_thresh=0.88,
+                 stability_score_thresh=0.92,
+                 *args, **kwargs):
     
     with torch.autocast(device_type='cuda', dtype=torch.float16):
         sam_info= get_sam_json(sam, image,box_nms=box_nms,min_mask_region_area=min_mask_region_area,pred_iou_thresh=pred_iou_thresh,stability_score_thresh=stability_score_thresh, *args, **kwargs)
