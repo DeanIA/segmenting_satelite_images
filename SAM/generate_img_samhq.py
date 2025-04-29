@@ -84,30 +84,21 @@ def make_dirs():
 
 
 # For SAMHQ
-# min_region = 500 # Minimum area (in pixels) for a mask region to be kept. 
-# box_nms = 0.6 # Threshold for removing overlapping predicted boxes.
-# pred_iou_thresh = 0.85 # Minimum predicted Intersection-over-Union. Masks with lower IoU scores are filtered out.
-# stability_score_thresh = 0.85 # Minimum stability score threshold for keeping a mask.
-
-# For SAM
-min_region = 500
-box_nms = 0.6
-pred_iou_thresh = 0.85
-stability_score_thresh = 0.85
+min_region = 500 # Minimum area (in pixels) for a mask region to be kept. 
+box_nms = 0.6 # Threshold for removing overlapping predicted boxes.
+pred_iou_thresh = 0.85 # Minimum predicted Intersection-over-Union. Masks with lower IoU scores are filtered out.
+stability_score_thresh = 0.85 # Minimum stability score threshold for keeping a mask.
 
 # For SAMHQ
-#sam_checkpoint = {'vit_h':"SAM/ckpt/sam_hq_vit_h.pth"}
-
-# For SAM
-sam_checkpoint = {'vit_h':"SAM/ckpt/sam_vit_h_4b8939.pth"}
+sam_checkpoint = {'vit_h':"SAM/ckpt/sam_hq_vit_h.pth"}
 
 model_type = "vit_h"
 device = "cuda"
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint[model_type])
 sam.to(device=device)
 
-image_dir = '/home/jupyter-dai7591/abc_sam_sessrs/geoseg/data/Urban/val/images'
-sam_img_dir = '/home/jupyter-dai7591/abc_sam_sessrs/geoseg/data/Urban/sam_label/samhq'
+image_dir = 'GeoSeg/data/Urban/val/images'
+sam_img_dir = 'GeoSeg/fig_results/Urban/output_masks_loveda/sam_label_info/samhq'
 
 
 lbl_dir = os.path.join(sam_img_dir,'label') # label: Segmentation mask image
